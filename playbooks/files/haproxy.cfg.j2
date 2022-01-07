@@ -14,9 +14,9 @@ backend webservers
     option httpchk
     option forwardfor
     option http-server-close
-    server kube_api0 10.240.0.11:80 check
-    server kube_api1 10.240.0.12:80 check
-    server kube_api2 10.240.0.13:80 check
+    {% for host in masters %}
+    server kube_api{{loop.index}} {{hostvars[host].ansible_all_ipv4_addresses[1]}}:80 check
+    {% endfor %}
 frontend kubectl-https-in
     bind *:6443
     mode tcp
@@ -27,9 +27,10 @@ backend kube-api
     option httpchk
     option forwardfor
     option http-server-close
-    server kube_api0 10.240.0.11:6443
-    server kube_api1 10.240.0.12:6443
-    server kube_api2 10.240.0.13:6443
+    {% for host in masters %}
+    server kube_api{{loop.index}} {{hostvars[host].ansible_all_ipv4_addresses[1]}}:6443
+    {% endfor %}
+
 frontend etcd-https-in
     bind *:2379
     mode tcp
@@ -40,6 +41,6 @@ backend etcd-api
     option httpchk
     option forwardfor
     option http-server-close
-    server etcd_api0 10.240.0.11:2379
-    server etcd_api1 10.240.0.12:2379
-    server etcd_api2 10.240.0.13:2379
+    {% for host in masters %}
+    server etcd_api{{loop.index}} {{hostvars[host].ansible_all_ipv4_addresses[1]}}:2379
+    {% endfor %}

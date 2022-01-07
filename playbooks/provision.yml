@@ -138,9 +138,11 @@
         - kubectl
         - haproxy
       state: present
-  - name: Add haproxy sshd_config | {{ inventory_hostname }}
-    ansible.builtin.copy:
-      src: files/haproxy.cfg
+  - name: Add haproxy config | {{ inventory_hostname }}
+    vars:
+      masters: "{{ groups['masters'] }}"
+    ansible.builtin.template:
+      src: files/haproxy.cfg.j2
       dest: /etc/haproxy/haproxy.cfg
       mode: 0644
   - name: Start haproxy | {{ inventory_hostname }}
