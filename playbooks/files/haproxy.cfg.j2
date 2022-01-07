@@ -14,7 +14,7 @@ backend webservers
     option httpchk
     option forwardfor
     option http-server-close
-    {% for host in masters %}
+    {% for host in masters -%}
     server kube_api{{loop.index}} {{hostvars[host].ansible_all_ipv4_addresses[1]}}:80 check
     {% endfor %}
 frontend kubectl-https-in
@@ -27,10 +27,9 @@ backend kube-api
     option httpchk
     option forwardfor
     option http-server-close
-    {% for host in masters %}
+    {% for host in masters -%}
     server kube_api{{loop.index}} {{hostvars[host].ansible_all_ipv4_addresses[1]}}:6443
-    {% endfor %}
-
+    {% endfor -%}
 frontend etcd-https-in
     bind *:2379
     mode tcp
@@ -41,6 +40,6 @@ backend etcd-api
     option httpchk
     option forwardfor
     option http-server-close
-    {% for host in masters %}
+    {% for host in masters -%}
     server etcd_api{{loop.index}} {{hostvars[host].ansible_all_ipv4_addresses[1]}}:2379
     {% endfor %}
