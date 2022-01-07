@@ -149,7 +149,7 @@
     ansible.builtin.service:
       name: haproxy
       enabled: true
-      state: started
+      state: restarted
   - name: Check that the arkade exists
     stat:
       path: /usr/local/bin/arkade
