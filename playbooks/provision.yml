@@ -1,0 +1,178 @@
+---
+- hosts: all
+  gather_facts: no
+  become: true
+  tasks:
+  - name: Replace a localhost entry with our own | {{ inventory_hostname }}
+    lineinfile:
+      path: /etc/hosts
+      regexp: '^127\.0\.0\.1'
+      line: 127.0.0.1 localhost
+      owner: root
+      group: root
+      mode: '0644'
+  - name: Allow password authentication |{{ inventory_hostname }}
+    lineinfile:
+      path: /etc/ssh/sshd_config
+      regexp: "^PasswordAuthentication"
+      line: "PasswordAuthentication yes"
+      state: present
+    notify: restart sshd
+  - name: Set authorized key took from file | {{ inventory_hostname }}
+    authorized_key:
+      user: vagrant
+      state: present
+      key: "{{ lookup('file', '/home/vagrant/.ssh/id_rsa.pub') }}"
+  - name: Add IP address of all hosts to all hosts | {{ inventory_hostname }}
+    lineinfile:
+      dest: /etc/hosts
+      regexp: '.*{{ item }}$'
+      line: "{{ hostvars[item].ansible_host }} {{ item }}"
+      state: present
+    when: hostvars[item].ansible_host is defined
+    with_items: "{{ groups.all }}"
+  - name: Copy SSH key
+    ansible.builtin.copy:
+      src: ~/.ssh/id_rsa
+      dest: /home/vagrant/.ssh/id_rsa
+      mode: 0600
+      owner: vagrant
+      group: vagrant
+  - name: Copy SSH config
+    ansible.builtin.copy:
+      src: files/ssh-config
+      dest: /home/vagrant/.ssh/config
+      mode: 0600
+      owner: vagrant
+      group: vagrant
+  handlers:
+  - name: restart sshd
+    service:
+      name: sshd
+      state: restarted
+
+- hosts: kubernetes
+  gather_facts: yes
+  become: true
+
+  tasks:
+  - name: Add Docker GPG key  | {{ inventory_hostname }}
+    apt_key:
+      url: https://download.docker.com/linux/ubuntu/gpg
+  - name: Add Kubernetes GPG key | {{ inventory_hostname }}
+    apt_key:
+      url: https://packages.cloud.google.com/apt/doc/apt-key.gpg
+  - name: Add Docker repository | {{ inventory_hostname }}
+    ansible.builtin.apt_repository:
+      repo: deb [arch=amd64] https://download.docker.com/{{ ansible_system | lower }}/{{ ansible_distribution | lower }} {{ ansible_distribution_release }} stable
+      state: present
+  - name: Add Kubernetes repository | {{ inventory_hostname }}
+    ansible.builtin.apt_repository:
+      repo: deb https://apt.kubernetes.io/ kubernetes-xenial main
+      state: present
+  - name: Install packages | {{ inventory_hostname }}
+    ansible.builtin.apt:
+      name:
+        - docker-ce={{ docker_version }}
+        - docker-ce-cli={{ docker_version }}
+        - kubelet={{ kube_version }}
+        - kubeadm={{ kube_version }}
+        - kubectl={{ kubectl_version }}
+      state: present
+      update_cache: yes
+  - name: hold version | {{ inventory_hostname }}
+    ansible.builtin.dpkg_selections:
+      name: "{{ item }}"
+      selection: hold
+    with_items:
+      - kubeadm
+      - kubelet
+      - docker-ce
+      - kubecetl
+  - name: Add vagrant to group Docker | {{ inventory_hostname }}
+    ansible.builtin.user:
+      name: vagrant
+      group: docker
+  - name: Update Docker config | {{ inventory_hostname }}
+    ansible.builtin.copy:
+      src: files/daemon.json
+      dest: /etc/docker/daemon.json
+      mode: 0644
+    notify: restart docker
+  - name: Check swap State
+    ansible.builtin.stat:
+      path: /swapfile
+    register: swap_file_check
+  - name: Umount swap | {{ inventory_hostname }}
+    ansible.posix.mount:
+      name: swap
+      fstype: swap
+      state: absent
+    when: swap_file_check.stat.exists
+  - name: Swap Off | {{ inventory_hostname }}
+    ansible.builtin.shell:
+      cmd: swapoff -a
+    when: ansible_swaptotal_mb > 0
+
+  handlers:
+  - name: restart docker
+    service:
+      name: docker
+      state: restarted
+
+- hosts: controller
+  gather_facts: no
+  become: true
+
+  tasks:
+  - name: Add Kubernetes GPG key | {{ inventory_hostname }}
+    apt_key:
+      url: https://packages.cloud.google.com/apt/doc/apt-key.gpg
+  - name: Add Kubernetes repository | {{ inventory_hostname }}
+    ansible.builtin.apt_repository:
+      repo: deb https://apt.kubernetes.io/ kubernetes-xenial main
+      state: present
+  - name: Install packages | {{ inventory_hostname }}
+    ansible.builtin.package:
+      name:
+        - kubectl
+        - haproxy
+      state: present
+  - name: Add haproxy sshd_config | {{ inventory_hostname }}
+    ansible.builtin.copy:
+      src: files/haproxy.cfg
+      dest: /etc/haproxy/haproxy.cfg
+      mode: 0644
+  - name: Start haproxy | {{ inventory_hostname }}
+    ansible.builtin.service:
+      name: haproxy
+      enabled: true
+      state: started
+  - name: Check that the arkade exists
+    stat:
+      path: /usr/local/bin/arkade
+    register: stat_result
+  - name: Download Arkade
+    ansible.builtin.uri:
+      url: https://get.arkade.dev
+      return_content: true
+    register: arkade_installer
+    when: not stat_result.stat.exists
+  - name: Install Arkade
+    ansible.builtin.shell:
+      cmd: sh -s -- -y
+      stdin: "{{ arkade_installer.content }}"
+    when: not stat_result.stat.exists
+  - name: Add Arkade to path
+    become: true
+    ansible.builtin.copy:
+      dest: /etc/profile.d/custom-path.sh
+      content: PATH=$PATH:/home/vagrant/.arkade/bin
+      mode: 0776
+  - name: Create folder .kube
+    ansible.builtin.file:
+      dest: /home/vagrant/.kube
+      state: directory
+      owner: vagrant
+      group: vagrant
+      mode: 0700
