@@ -1,45 +1,52 @@
 global
     daemon
     maxconn 256
+
 defaults
     mode http
     timeout connect 5000ms
     timeout client 50000ms
     timeout server 50000ms
+
 frontend http-in
     bind *:80
     default_backend webservers
+
 backend webservers
     balance roundrobin
     option httpchk
     option forwardfor
     option http-server-close
-    {% for host in masters -%}
-    server kube_api{{loop.index}} {{hostvars[host].ansible_all_ipv4_addresses[1]}}:80 check
+    {% for host in masters %}
+server kube_api{{loop.index}} {{base_ip_str}}{{loop.index}}:80 check
     {% endfor %}
+
 frontend kubectl-https-in
     bind *:6443
     mode tcp
     default_backend kube-api
+
 backend kube-api
     mode tcp
     balance roundrobin
     option httpchk
     option forwardfor
     option http-server-close
-    {% for host in masters -%}
-    server kube_api{{loop.index}} {{hostvars[host].ansible_all_ipv4_addresses[1]}}:6443
-    {% endfor -%}
+    {% for host in masters %}
+server kube_api{{loop.index}} {{base_ip_str}}{{loop.index}}:6443
+    {% endfor %}
+
 frontend etcd-https-in
     bind *:2379
     mode tcp
     default_backend etcd-api
+
 backend etcd-api
     mode tcp
     balance roundrobin
     option httpchk
     option forwardfor
     option http-server-close
-    {% for host in masters -%}
-    server etcd_api{{loop.index}} {{hostvars[host].ansible_all_ipv4_addresses[1]}}:2379
+    {% for host in masters %}
+server etcd_api{{loop.index}} {{base_ip_str}}{{loop.index}}:2379
     {% endfor %}
