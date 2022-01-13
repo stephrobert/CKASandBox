@@ -7,7 +7,7 @@ Vagrant.configure(2) do |config|
   number_master = 1 # Number of master nodes kubernetes
   cpu_master = 2
   mem_master = 1792
-  number_worker = 1 # Number of workers nodes kubernetes
+  number_worker = 2 # Number of workers nodes kubernetes
   cpu_worker = 1
   mem_worker = 1024
   config.vm.box = "generic/ubuntu2004" # Image for all installations
@@ -53,7 +53,7 @@ Vagrant.configure(2) do |config|
           lv.memory = mem_worker
         end
       end
-
+      machine.vm.synced_folder '.', '/vagrant', disabled: true
       machine.vm.network "private_network", ip: node["ip"]
       machine.vm.provision "ansible" do |ansible|
         ansible.playbook = "playbooks/provision.yml"
@@ -65,7 +65,8 @@ Vagrant.configure(2) do |config|
             "base_ip_str" => "#{base_ip_str}",
             "kubectl_version" => "#{kubectl_version}",
             "kube_version" => "#{kube_version}",
-            "docker_version" => "#{docker_version}"
+            "docker_version" => "#{docker_version}",
+            "number_master" => "#{number_master}"
           }
         }
       end
