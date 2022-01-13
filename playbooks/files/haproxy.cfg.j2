@@ -4,21 +4,26 @@ global
 
 defaults
     mode http
+    log global
+    option redispatch
+    retries 3
     timeout connect 5000ms
     timeout client 50000ms
     timeout server 50000ms
 
 frontend http-in
+    mode tcp
     bind *:80
     default_backend webservers
 
 backend webservers
+    mode tcp
+    option tcplog
+    option tcp-check
     balance roundrobin
-    option httpchk
-    option forwardfor
-    option http-server-close
-    {% for host in masters %}
-server kube_api{{loop.index}} {{base_ip_str}}{{loop.index}}:80 check
+    default-server inter 10s downinter 5s rise 2 fall 2 slowstart 60s maxconn 250 maxqueue 256 weight 100
+    {% for host in workers %}
+server webserver{{loop.index}} {{base_ip_str}}{{loop.index+number_master}}:80 check
     {% endfor %}
 
 frontend kubectl-https-in
