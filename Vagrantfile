@@ -12,7 +12,7 @@ Vagrant.configure(2) do |config|
   mem_worker = 1024
   config.vm.box = "generic/ubuntu2004" # Image for all installations
   kubectl_version = "1.23.1-00"
-  kube_version = "1.22.5-00"
+  kube_version = "1.23.1-00"
   docker_version = "5:20.10.12~3-0~ubuntu-focal"
 
 
@@ -61,7 +61,8 @@ Vagrant.configure(2) do |config|
           "masters" => ["master[1:#{number_master}]"],
           "workers" => ["worker[1:#{number_worker}]"],
           "kubernetes:children" => ["masters", "workers"],
-          "kubernetes:vars" => {
+          "all:vars" => {
+            "base_ip_str" => "#{base_ip_str}",
             "kubectl_version" => "#{kubectl_version}",
             "kube_version" => "#{kube_version}",
             "docker_version" => "#{docker_version}"
