@@ -66,12 +66,14 @@
     ansible.builtin.apt_repository:
       repo: deb [arch=amd64] https://download.docker.com/{{ ansible_system | lower }}/{{ ansible_distribution | lower }} {{ ansible_distribution_release }} stable
       state: present
+      update_cache: no
   - name: Add Kubernetes repository | {{ inventory_hostname }}
     ansible.builtin.apt_repository:
       repo: deb https://apt.kubernetes.io/ kubernetes-xenial main
       state: present
+      update_cache: no
   - name: Install packages | {{ inventory_hostname }}
-    ansible.builtin.apt:
+    ansible.builtin.package:
       name:
         - docker-ce={{ docker_version }}
         - docker-ce-cli={{ docker_version }}
