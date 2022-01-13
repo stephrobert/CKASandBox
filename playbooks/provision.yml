@@ -143,6 +143,7 @@
   - name: Add haproxy config | {{ inventory_hostname }}
     vars:
       masters: "{{ groups['masters'] }}"
+      workers: "{{ groups['workers'] }}"
     ansible.builtin.template:
       src: files/haproxy.cfg.j2
       dest: /etc/haproxy/haproxy.cfg
