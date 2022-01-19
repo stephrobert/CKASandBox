@@ -7,7 +7,7 @@ Vagrant.configure(2) do |config|
   number_master = 1 # Number of master nodes kubernetes
   cpu_master = 2
   mem_master = 1792
-  number_worker = 2 # Number of workers nodes kubernetes
+  number_worker = 1 # Number of workers nodes kubernetes
   cpu_worker = 1
   mem_worker = 1024
   config.vm.box = "generic/ubuntu2004" # Image for all installations
@@ -71,5 +71,10 @@ Vagrant.configure(2) do |config|
         }
       end
     end
+  end
+  config.push.define "local-exec" do |push|
+    push.inline = <<-SCRIPT
+      ansible-playbook -i .vagrant/provisioners/ansible/inventory/vagrant_ansible_inventory playbooks/init-cluster.yml
+    SCRIPT
   end
 end
