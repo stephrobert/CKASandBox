@@ -151,6 +151,10 @@
       state: restarted
     tags: patch
     when: state.changed
+    register: myserviceDetails
+    until: myserviceDetails.status.ActiveState == "active"
+    retries: 15
+    delay: 20
 
 - name: Approve pending certificats
   hosts: controller
@@ -164,12 +168,14 @@
     register: tokens
     tags: patch
     changed_when: false
+  - name: debug
+    debug:
+      var: tokens.stdout_lines
   - name: Approve Pending certificats
     ansible.builtin.shell:
       cmd: |
-        kubectl approuve csr {{ item }}
-    with_items:
-      tokens.stdout_lines
+        kubectl certificate approve {{ item }}
+    with_items: "{{ tokens.stdout_lines }}"
     when: tokens.stdout != ""
     tags: patch
   - name: Install metrics server
