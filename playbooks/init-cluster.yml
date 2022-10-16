@@ -1,188 +1,189 @@
 ---
-- hosts: masters[0]
-  gather_facts: no
+- name: Initiate Master Node
+  hosts: masters[0]
+  gather_facts: false
   become: true
   tasks:
-  - name: Check that cluster is not yet initialized
-    stat:
-      path: /var/lib/kubelet/config.yaml
-      get_attributes: no
-      get_checksum: no
-      get_mime: no
-    register: kubadm_conf
-  - name: Launch kubeadm init
-    ansible.builtin.shell:
-      cmd: |
-        kubeadm init --pod-network-cidr=192.168.0.0/16 --control-plane-endpoint "10.240.0.10:6443" --upload-certs --ignore-preflight-errors=NumCPU,Mem
-    register: kubeadm_init
-    retries: 3
-    until: kubeadm_init is succeeded or "field is immutable" in kubeadm_init.stderr
-    when: not kubadm_conf.stat.exists
-    failed_when: kubeadm_init.rc != 0 and "field is immutable" not in kubeadm_init.stderr
-  - name: Create kubeadm token for joining nodes
-    ansible.builtin.shell:
-      cmd: |
-        kubeadm token create --print-join-command
-    register: temp_token
-    changed_when: false
-    when:
-      - kubeadm_token is not defined
-  - name: Set kubeadm_token to generated token
-    set_fact:
-      kubeadm_token: "{{ temp_token.stdout }}"
-    when: kubeadm_token is not defined
-  - name: Create file join command
-    vars:
-      ansible_python_interpreter: /usr/bin/python3
-    ansible.builtin.copy:
-      dest: /tmp/kubeadm_token
-      content: "{{ kubeadm_token }}"
-      mode: 0600
-    delegate_to: localhost
-  - name: Create kubeconfig file
-    ansible.builtin.fetch:
-      src: /etc/kubernetes/admin.conf
-      dest: /tmp/kubeconfig
-      flat: true
+    - name: Check that cluster is not yet initialized
+      ansible.builtin.stat:
+        path: /var/lib/kubelet/config.yaml
+        get_attributes: no
+        get_checksum: no
+        get_mime: no
+      register: kubadm_conf
+    - name: Launch kubeadm init
+      ansible.builtin.shell:
+        cmd: |
+          kubeadm init --pod-network-cidr=192.168.0.0/16 --control-plane-endpoint "10.240.0.10:6443" --upload-certs --ignore-preflight-errors=NumCPU,Mem
+      register: kubeadm_init
+      retries: 3
+      until: kubeadm_init is succeeded or "field is immutable" in kubeadm_init.stderr
+      when: not kubadm_conf.stat.exists
+      failed_when: kubeadm_init.rc != 0 and "field is immutable" not in kubeadm_init.stderr
+    - name: Create kubeadm token for joining nodes
+      ansible.builtin.shell:
+        cmd: |
+          kubeadm token create --print-join-command
+      register: temp_token
+      changed_when: false
+      when:
+        - kubeadm_token is not defined
+    - name: Set kubeadm_token to generated token
+      set_fact:
+        kubeadm_token: "{{ temp_token.stdout }}"
+      when: kubeadm_token is not defined
+    - name: Create file join command
+      vars:
+        ansible_python_interpreter: /usr/bin/python3
+      ansible.builtin.copy:
+        dest: /tmp/kubeadm_token
+        content: "{{ kubeadm_token }}"
+        mode: 0600
+      delegate_to: localhost
+    - name: Create kubeconfig file
+      ansible.builtin.fetch:
+        src: /etc/kubernetes/admin.conf
+        dest: /tmp/kubeconfig
+        flat: true
 
 - name: Join master nodes
   hosts: masters:!master1
-  gather_facts: no
+  gather_facts: false
   become: true
   tasks:
-  - name: debug
-    debug:
-      var: kubeadm_token
+    - name: Debug
+      ansible.builtin.debug:
+        var: kubeadm_token
 
 - name: Join workers nodes
   hosts: workers
-  gather_facts: no
+  gather_facts: false
   become: true
   tasks:
-  - name: Load kubeadm_token from file
-    ansible.builtin.slurp:
-      src: /tmp/kubeadm_token
-    delegate_to: localhost
-    run_once: true
-    register: kubeadm_token
-  - name: Check if node is not already registered
-    stat:
-      path: /etc/kubernetes/kubelet.conf
-      get_attributes: no
-      get_checksum: no
-      get_mime: no
-    register: kubelet_conf
-  - name: Join workers nodes to cluster
-    ansible.builtin.shell:
-      cmd: |
-        {{ kubeadm_token.content | b64decode }}
-    register: kubeadm_join
-    when: not kubelet_conf.stat.exists
+    - name: Load kubeadm_token from file
+      ansible.builtin.slurp:
+        src: /tmp/kubeadm_token
+      delegate_to: localhost
+      run_once: true
+      register: kubeadm_token
+    - name: Check if node is not already registered
+      ansible.builtin.stat:
+        path: /etc/kubernetes/kubelet.conf
+        get_attributes: no
+        get_checksum: no
+        get_mime: no
+      register: kubelet_conf
+    - name: Join workers nodes to cluster
+      ansible.builtin.shell:
+        cmd: |
+          {{ kubeadm_token.content | b64decode }}
+      register: kubeadm_join
+      when: not kubelet_conf.stat.exists
 
 - name: Configure controller
   hosts: controller
-  gather_facts: no
+  gather_facts: false
   become: false
   collections:
     - kubernetes.core
   tasks:
-  - name: Copy kubeconfig on controller node
-    ansible.builtin.copy:
-      src: /tmp/kubeconfig
-      dest: $HOME/.kube/config
-      mode: 0600
-  - name: Install pip3
-    become: true
-    ansible.builtin.package:
-      name: python3-pip
-      state: present
-  - name: Install kubernetes python  module
-    ansible.builtin.pip:
-      name: kubernetes
-      state: present
-  - name: Install calico network
-    kubernetes.core.k8s:
-      state: present
-      definition: "{{ lookup('url', 'https://docs.projectcalico.org/manifests/calico.yaml', split_lines=False) }}"
-  - name: set major kube_version
-    ansible.builtin.set_fact:
-      major_version: "{{ kube_version | regex_replace('^([0-9])\\.([0-9]*).*', '\\1.\\2') }}"
-    tags: patch
-  - name: Get kubelet-config
-    ansible.builtin.shell:
-      cmd: |
-        kubectl -n kube-system get configmaps kubelet-config-{{ major_version }} -o yaml
-    register: kubelet_config
-    tags: patch
-    changed_when: false
-  - name: Save to file
-    ansible.builtin.copy:
-      dest: /tmp/kubelet-config.yaml
-      content: "{{ kubelet_config.stdout }}"
-      mode: 0600
-    tags: patch
-  - name: add servertlsbootstrap to kubelet_config
-    ansible.builtin.lineinfile:
-      path: /tmp/kubelet-config.yaml
-      insertafter: ".*KubeletConfiguration.*"
-      line: "    serverTLSBootstrap: true"
-    tags: patch
-  - name: Apply patch to kube_config
-    kubernetes.core.k8s:
-      state: present
-      src: /tmp/kubelet-config.yaml
-    tags: patch
+    - name: Copy kubeconfig on controller node
+      ansible.builtin.copy:
+        src: /tmp/kubeconfig
+        dest: $HOME/.kube/config
+        mode: 0600
+    - name: Install pip3
+      become: true
+      ansible.builtin.package:
+        name: python3-pip
+        state: present
+    - name: Install kubernetes python  module
+      ansible.builtin.pip:
+        name: kubernetes
+        state: present
+    - name: Install calico network
+      kubernetes.core.k8s:
+        state: present
+        definition: "{{ lookup('url', 'https://docs.projectcalico.org/manifests/calico.yaml', split_lines=False) }}"
+    - name: set major kube_version
+      ansible.builtin.set_fact:
+        major_version: "{{ kube_version | regex_replace('^([0-9])\\.([0-9]*).*', '\\1.\\2') }}"
+      tags: patch
+    - name: Get kubelet-config
+      ansible.builtin.shell:
+        cmd: |
+          kubectl -n kube-system get configmaps kubelet-config-{{ major_version }} -o yaml
+      register: kubelet_config
+      tags: patch
+      changed_when: false
+    - name: Save to file
+      ansible.builtin.copy:
+        dest: /tmp/kubelet-config.yaml
+        content: "{{ kubelet_config.stdout }}"
+        mode: 0600
+      tags: patch
+    - name: add servertlsbootstrap to kubelet_config
+      ansible.builtin.lineinfile:
+        path: /tmp/kubelet-config.yaml
+        insertafter: ".*KubeletConfiguration.*"
+        line: "    serverTLSBootstrap: true"
+      tags: patch
+    - name: Apply patch to kube_config
+      kubernetes.core.k8s:
+        state: present
+        src: /tmp/kubelet-config.yaml
+      tags: patch
 
 - name: Patch kubelet config on workers nodes
   hosts: kubernetes
-  gather_facts: no
+  gather_facts: false
   become: true
   tasks:
-  - name: Load kubeadm_token from file
-    ansible.builtin.lineinfile:
-      path: /var/lib/kubelet/config.yaml
-      insertafter: ".*KubeletConfiguration.*"
-      line: "serverTLSBootstrap: true"
-    tags: patch
-    register: state
-  - name: restart kubelet service
-    ansible.builtin.service:
-      name: kubelet
-      state: restarted
-    tags: patch
-    when: state.changed
-    register: myserviceDetails
-    until: myserviceDetails.status.ActiveState == "active"
-    retries: 15
-    delay: 20
+    - name: Load kubeadm_token from file
+      ansible.builtin.lineinfile:
+        path: /var/lib/kubelet/config.yaml
+        insertafter: ".*KubeletConfiguration.*"
+        line: "serverTLSBootstrap: true"
+      tags: patch
+      register: state
+    - name: restart kubelet service
+      ansible.builtin.service:
+        name: kubelet
+        state: restarted
+      tags: patch
+      when: state.changed
+      register: myserviceDetails
+      until: myserviceDetails.status.ActiveState == "active"
+      retries: 15
+      delay: 20
 
 - name: Approve pending certificats
   hosts: controller
-  gather_facts: no
+  gather_facts: false
   become: false
   tasks:
-  - name: Get Pending certificats
-    ansible.builtin.shell:
-      cmd: |
-        kubectl get csr | grep Pending | awk '{print $1}'
-    register: tokens
-    tags: patch
-    changed_when: false
-  - name: debug
-    debug:
-      var: tokens.stdout_lines
-  - name: Approve Pending certificats
-    ansible.builtin.shell:
-      cmd: |
-        kubectl certificate approve {{ item }}
-    with_items: "{{ tokens.stdout_lines }}"
-    when: tokens.stdout != ""
-    tags: patch
-  - name: Install metrics server
-    kubernetes.core.k8s:
-      state: present
-      definition: "{{ lookup('url', 'https://github.com/kubernetes-sigs/metrics-server/releases/latest/download/components.yaml', split_lines=False) }}"
-    tags: patch
+    - name: Get Pending certificats
+      ansible.builtin.shell:
+        cmd: |
+          kubectl get csr | grep Pending | awk '{print $1}'
+      register: tokens
+      tags: patch
+      changed_when: false
+    - name: Debug
+      ansible.builtin.debug:
+        var: tokens.stdout_lines
+    - name: Approve Pending certificats
+      ansible.builtin.shell:
+        cmd: |
+          kubectl certificate approve {{ item }}
+      with_items: "{{ tokens.stdout_lines }}"
+      when: tokens.stdout != ""
+      tags: patch
+    - name: Install metrics server
+      kubernetes.core.k8s:
+        state: present
+        definition: "{{ lookup('url', 'https://github.com/kubernetes-sigs/metrics-server/releases/latest/download/components.yaml', split_lines=False) }}"
+      tags: patch
 
 
 

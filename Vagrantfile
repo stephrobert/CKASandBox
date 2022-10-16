@@ -1,6 +1,6 @@
 # -*- mode: ruby -*-
 # vi: set ft=ruby :
-
+ENV['VAGRANT_NO_PARALLEL'] = 'yes'
 Vagrant.configure(2) do |config|
 
   base_ip_str = "10.240.0.1"
@@ -10,10 +10,10 @@ Vagrant.configure(2) do |config|
   number_worker = 1 # Number of workers nodes kubernetes
   cpu_worker = 1
   mem_worker = 1024
-  config.vm.box = "generic/ubuntu2004" # Image for all installations
-  kubectl_version = "1.23.1-00"
-  kube_version = "1.23.1-00"
-  docker_version = "5:20.10.12~3-0~ubuntu-focal"
+  config.vm.box = "generic/ubuntu2204" # Image for all installations
+  kubectl_version = "1.25.2-00"
+  kube_version = "1.25.2-00"
+  docker_version = "5:20.10.19~3-0~ubuntu-jammy"
 
 
 # Compute nodes
@@ -42,6 +42,8 @@ Vagrant.configure(2) do |config|
 
 # Provision VM
   nodes.each do |node|
+    config.hostmanager.enabled = true
+    config.hostmanager.manage_host = true
     config.vm.define node["name"] do |machine|
       machine.vm.hostname = node["name"]
       machine.vm.provider "libvirt" do |lv|
@@ -74,7 +76,7 @@ Vagrant.configure(2) do |config|
   end
   config.push.define "local-exec" do |push|
     push.inline = <<-SCRIPT
-      ansible-playbook -i .vagrant/provisioners/ansible/inventory/vagrant_ansible_inventory playbooks/init-cluster.yml
+      ansible-playbook -i .vagrant/provisioners/ansible/inventory/vagrant_ansible_inventory playbooks/init-cluster.yml -u vagrant
     SCRIPT
   end
 end
