@@ -73,6 +73,14 @@
         repo: deb https://apt.kubernetes.io/ kubernetes-xenial main
         state: present
         update_cache: true
+    - name: Add Docker GPG key | {{ inventory_hostname }}
+      ansible.builtin.apt_key:
+        url: https://download.docker.com/linux/ubuntu/gpg
+    - name: Add Docker repository | {{ inventory_hostname }}
+      ansible.builtin.apt_repository:
+        repo: deb https://download.docker.com/linux/ubuntu jammy stable
+        state: present
+        update_cache: true
     - name: Install packages | {{ inventory_hostname }}
       ansible.builtin.package:
         name:
@@ -84,7 +92,7 @@
           - kubeadm={{ kube_version }}
           - kubectl={{ kubectl_version }}
           - cri-tools
-          - containerd
+          - containerd.io
           - net-tools
         state: present
     - name: Hold version | {{ inventory_hostname }}
@@ -178,7 +186,7 @@
         state: present
     - name: Add haproxy config | {{ inventory_hostname }}
       vars:
-        masters: "{{ groups['masters'] }}"
+        cplanes: "{{ groups['cplanes'] }}"
         workers: "{{ groups['workers'] }}"
       ansible.builtin.template:
         src: files/haproxy.cfg.j2

@@ -34,7 +34,7 @@ backend webservers
     balance roundrobin
     default-server inter 10s downinter 5s rise 2 fall 2 slowstart 60s maxconn 250 maxqueue 256 weight 100
     {% for host in workers %}
-server webserver{{loop.index}} {{base_ip_str}}{{loop.index+number_master}}:80 check
+server webserver{{loop.index}} {{base_ip_str}}{{loop.index+number_cplane}}:80 check
     {% endfor %}
 
 frontend kubectl-https-in
@@ -48,7 +48,7 @@ backend kube-api
     option httpchk
     option forwardfor
     option http-server-close
-    {% for host in masters %}
+    {% for host in cplanes %}
 server kube_api{{loop.index}} {{base_ip_str}}{{loop.index}}:6443
     {% endfor %}
 
@@ -63,6 +63,6 @@ backend etcd-api
     option httpchk
     option forwardfor
     option http-server-close
-    {% for host in masters %}
+    {% for host in cplanes %}
 server etcd_api{{loop.index}} {{base_ip_str}}{{loop.index}}:2379
     {% endfor %}

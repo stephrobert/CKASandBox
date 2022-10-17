@@ -1,6 +1,6 @@
 ---
-- name: Initiate Master Node
-  hosts: masters[0]
+- name: Initiate cplane Node
+  hosts: cplanes[0]
   gather_facts: false
   become: true
   tasks:
@@ -26,10 +26,7 @@
           --ignore-preflight-errors=NumCPU,Mem
           --cri-socket unix:///run/containerd/containerd.sock
       register: kubeadm_init
-      retries: 3
-      until: kubeadm_init is succeeded or "field is immutable" in kubeadm_init.stderr
-      when: not kubadm_conf.stat.exists
-      failed_when: kubeadm_init.rc != 0 and "field is immutable" not in kubeadm_init.stderr
+      # failed_when: kubeadm_init.rc != 0
     - name: Create kubeadm token for joining nodes
       ansible.builtin.shell:
         cmd: |
@@ -56,8 +53,8 @@
         dest: /tmp/kubeconfig
         flat: true
 
-- name: Join master nodes
-  hosts: masters:!master1
+- name: Join cplane nodes
+  hosts: cplanes:!cplane1
   gather_facts: false
   become: true
   tasks:
@@ -115,10 +112,6 @@
       kubernetes.core.k8s:
         state: present
         definition: "{{ lookup('url', 'https://docs.projectcalico.org/manifests/calico.yaml', split_lines=False) }}"
-    - name: set major kube_version
-      ansible.builtin.set_fact:
-        major_version: "{{ kube_version | regex_replace('^([0-9])\\.([0-9]*).*', '\\1.\\2') }}"
-      tags: patch
     - name: Get kubelet-config
       ansible.builtin.shell:
         cmd: |
@@ -189,8 +182,8 @@
       with_items: "{{ tokens.stdout_lines }}"
       when: tokens.stdout != ""
       tags: patch
-    # - name: Install metrics server
-    #   kubernetes.core.k8s:
-    #     state: present
-    #     definition: "{{ lookup('url', 'https://github.com/kubernetes-sigs/metrics-server/releases/latest/download/components.yaml', split_lines=False) }}"
-    #   tags: patch
+    - name: Install metrics server
+      kubernetes.core.k8s:
+        state: present
+        definition: "{{ lookup('url', 'https://github.com/kubernetes-sigs/metrics-server/releases/latest/download/components.yaml', split_lines=False) }}"
+      tags: patch

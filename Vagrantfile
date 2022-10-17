@@ -4,20 +4,18 @@ ENV['VAGRANT_NO_PARALLEL'] = 'yes'
 Vagrant.configure(2) do |config|
 
   base_ip_str = "10.240.0.1"
-  number_master = 1 # Number of master nodes kubernetes
-  cpu_master = 2
-  mem_master = 1792
+  number_cplane = 1 # Number of cplane nodes kubernetes
+  cpu_cplane = 2
+  mem_cplane = 1792
   number_worker = 1 # Number of workers nodes kubernetes
   cpu_worker = 1
   mem_worker = 1024
   config.vm.box = "generic/ubuntu2204" # Image for all installations
   kubectl_version = "1.25.3-00"
   kube_version = "1.25.3-00"
-  docker_version = "5:20.10.19~3-0~ubuntu-jammy"
-
 
 # Compute nodes
-  number_machines = number_master + number_worker
+  number_machines = number_cplane + number_worker
 
   nodes = []
   (0..number_machines).each do |i|
@@ -27,14 +25,14 @@ Vagrant.configure(2) do |config|
           "name" => "controller",
           "ip" => "#{base_ip_str}#{i}"
         }
-      when 1..number_master
+      when 1..number_cplane
         nodes[i] = {
-          "name" => "master#{i}",
+          "name" => "cplane#{i}",
           "ip" => "#{base_ip_str}#{i}"
         }
-      when number_master..number_machines
+      when number_cplane..number_machines
         nodes[i] = {
-          "name" => "worker#{i-number_master}",
+          "name" => "worker#{i-number_cplane}",
           "ip" => "#{base_ip_str}#{i}"
         }
     end
@@ -47,9 +45,9 @@ Vagrant.configure(2) do |config|
     config.vm.define node["name"] do |machine|
       machine.vm.hostname = node["name"]
       machine.vm.provider "libvirt" do |lv|
-        if (node["name"] =~ /master/)
-          lv.cpus = cpu_master
-          lv.memory = mem_master
+        if (node["name"] =~ /cplane/)
+          lv.cpus = cpu_cplane
+          lv.memory = mem_cplane
         else
           lv.cpus = cpu_worker
           lv.memory = mem_worker
@@ -60,15 +58,14 @@ Vagrant.configure(2) do |config|
       machine.vm.provision "ansible" do |ansible|
         ansible.playbook = "playbooks/provision.yml"
         ansible.groups = {
-          "masters" => ["master[1:#{number_master}]"],
+          "cplanes" => ["cplane[1:#{number_cplane}]"],
           "workers" => ["worker[1:#{number_worker}]"],
-          "kubernetes:children" => ["masters", "workers"],
+          "kubernetes:children" => ["cplanes", "workers"],
           "all:vars" => {
             "base_ip_str" => "#{base_ip_str}",
             "kubectl_version" => "#{kubectl_version}",
             "kube_version" => "#{kube_version}",
-            "docker_version" => "#{docker_version}",
-            "number_master" => "#{number_master}"
+            "number_cplane" => "#{number_cplane}"
           }
         }
       end
