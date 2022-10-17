@@ -7,14 +7,24 @@
     - name: Check that cluster is not yet initialized
       ansible.builtin.stat:
         path: /var/lib/kubelet/config.yaml
-        get_attributes: no
-        get_checksum: no
-        get_mime: no
+        get_attributes: false
+        get_checksum: false
+        get_mime: false
       register: kubadm_conf
+    - name: Enable and start kubelet
+      ansible.builtin.service:
+        name: kubelet
+        state: started
+        enabled: true
     - name: Launch kubeadm init
       ansible.builtin.shell:
         cmd: |
-          kubeadm init --pod-network-cidr=192.168.0.0/16 --control-plane-endpoint "10.240.0.10:6443" --upload-certs --ignore-preflight-errors=NumCPU,Mem
+          kubeadm init
+          --pod-network-cidr=192.168.0.0/16
+          --control-plane-endpoint "10.240.0.10:6443"
+          --upload-certs
+          --ignore-preflight-errors=NumCPU,Mem
+          --cri-socket unix:///run/containerd/containerd.sock
       register: kubeadm_init
       retries: 3
       until: kubeadm_init is succeeded or "field is immutable" in kubeadm_init.stderr
@@ -29,7 +39,7 @@
       when:
         - kubeadm_token is not defined
     - name: Set kubeadm_token to generated token
-      set_fact:
+      ansible.builtin.set_fact:
         kubeadm_token: "{{ temp_token.stdout }}"
       when: kubeadm_token is not defined
     - name: Create file join command
@@ -69,14 +79,14 @@
     - name: Check if node is not already registered
       ansible.builtin.stat:
         path: /etc/kubernetes/kubelet.conf
-        get_attributes: no
-        get_checksum: no
-        get_mime: no
+        get_attributes: false
+        get_checksum: false
+        get_mime: false
       register: kubelet_conf
     - name: Join workers nodes to cluster
       ansible.builtin.shell:
         cmd: |
-          {{ kubeadm_token.content | b64decode }}
+          {{ kubeadm_token.content | b64decode }} --cri-socket unix:///run/containerd/containerd.sock
       register: kubeadm_join
       when: not kubelet_conf.stat.exists
 
@@ -112,7 +122,7 @@
     - name: Get kubelet-config
       ansible.builtin.shell:
         cmd: |
-          kubectl -n kube-system get configmaps kubelet-config-{{ major_version }} -o yaml
+          kubectl -n kube-system get configmaps kubelet-config -o yaml
       register: kubelet_config
       tags: patch
       changed_when: false
@@ -179,17 +189,8 @@
       with_items: "{{ tokens.stdout_lines }}"
       when: tokens.stdout != ""
       tags: patch
-    - name: Install metrics server
-      kubernetes.core.k8s:
-        state: present
-        definition: "{{ lookup('url', 'https://github.com/kubernetes-sigs/metrics-server/releases/latest/download/components.yaml', split_lines=False) }}"
-      tags: patch
-
-
-
-
-
-
-
-
-
+    # - name: Install metrics server
+    #   kubernetes.core.k8s:
+    #     state: present
+    #     definition: "{{ lookup('url', 'https://github.com/kubernetes-sigs/metrics-server/releases/latest/download/components.yaml', split_lines=False) }}"
+    #   tags: patch

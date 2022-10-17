@@ -7,7 +7,6 @@
     - name: Create user var
       ansible.builtin.set_fact:
         home_user: "{{ lookup('env', 'HOME') }}"
-
     - name: Replace a localhost entry with our own | {{ inventory_hostname }}
       ansible.builtin.lineinfile:
         path: /etc/hosts
@@ -60,19 +59,15 @@
   hosts: kubernetes
   gather_facts: true
   become: true
-
+  vars:
+    sysctl_config:
+      net.ipv4.ip_forward: 1
+      net.bridge.bridge-nf-call-ip6tables: 1
+      net.bridge.bridge-nf-call-iptables: 1
   tasks:
-    - name: Add Docker GPG key  | {{ inventory_hostname }}
-      ansible.builtin.apt_key:
-        url: https://download.docker.com/linux/ubuntu/gpg
     - name: Add Kubernetes GPG key | {{ inventory_hostname }}
       ansible.builtin.apt_key:
         url: https://packages.cloud.google.com/apt/doc/apt-key.gpg
-    - name: Add Docker repository | {{ inventory_hostname }}
-      ansible.builtin.apt_repository:
-        repo: deb [arch=amd64] https://download.docker.com/{{ ansible_system | lower }}/{{ ansible_distribution | lower }} {{ ansible_distribution_release }} stable
-        state: present
-        update_cache: false
     - name: Add Kubernetes repository | {{ inventory_hostname }}
       ansible.builtin.apt_repository:
         repo: deb https://apt.kubernetes.io/ kubernetes-xenial main
@@ -81,11 +76,16 @@
     - name: Install packages | {{ inventory_hostname }}
       ansible.builtin.package:
         name:
-          - docker-ce={{ docker_version }}
-          - docker-ce-cli={{ docker_version }}
+          - gnupg2
+          - software-properties-common
+          - apt-transport-https
+          - ca-certificates
           - kubelet={{ kube_version }}
           - kubeadm={{ kube_version }}
           - kubectl={{ kubectl_version }}
+          - cri-tools
+          - containerd
+          - net-tools
         state: present
     - name: Hold version | {{ inventory_hostname }}
       ansible.builtin.dpkg_selections:
@@ -94,18 +94,34 @@
       with_items:
         - kubeadm
         - kubelet
-        - docker-ce
         - kubecetl
-    - name: Add vagrant to group Docker | {{ inventory_hostname }}
-      ansible.builtin.user:
-        name: vagrant
-        group: docker
-    - name: Update Docker config | {{ inventory_hostname }}
+    - name: Load modules overlay and br_netfilter
+      ansible.builtin.modprobe:
+        name: overlay
+        state: present
+      with_items:
+        - overlay
+        - br_netfilter
+    - name: Load modprobe
+      ansible.builtin.shell:
+        cmd: modprobe {{ item }}
+      with_items:
+        - overlay
+        - br_netfilter
+    - name: Configure systctl
+      ansible.posix.sysctl:
+        name: "{{ item.key }}"
+        value: "{{ item.value }}"
+        state: present
+        sysctl_file: /etc/sysctl.d/kubernetes.conf
+      with_dict: '{{ sysctl_config }}'
+    - name: Configure crictl tools config
       ansible.builtin.copy:
-        src: files/daemon.json
-        dest: /etc/docker/daemon.json
+        src: files/crictl.yaml
+        dest: /etc/
+        owner: root
+        group: root
         mode: 0644
-      notify: Restart docker
     - name: Check swap State
       ansible.builtin.stat:
         path: /swapfile
@@ -116,23 +132,29 @@
         fstype: swap
         state: absent
       when: swap_file_check.stat.exists
-    - name: Delete Container default config
+    - name: Create containerd folder
       ansible.builtin.file:
-        path: /etc/containerd/config.toml
-        state: absent
-    - name: Restart containerd
-      ansible.builtin.service:
-        name: containerd
-        state: restarted
+        name: /etc/containerd/
+        owner: root
+        group: root
+        mode: 0644
+        state: directory
+    - name: Delete Container default config
+      ansible.builtin.copy:
+        src: files/config.toml
+        dest: /etc/containerd/config.toml
+        owner: root
+        group: root
+        mode: 0644
+      notify: Restart containerd
     - name: Swap Off | {{ inventory_hostname }}
       ansible.builtin.shell:
         cmd: swapoff -a
       when: ansible_swaptotal_mb > 0
-
   handlers:
-    - name: Restart docker
+    - name: Restart containerd
       ansible.builtin.service:
-        name: docker
+        name: containerd
         state: restarted
 
 - name: Install soft on controller
