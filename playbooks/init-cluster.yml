@@ -182,8 +182,8 @@
       with_items: "{{ tokens.stdout_lines }}"
       when: tokens.stdout != ""
       tags: patch
-    - name: Install metrics server
-      kubernetes.core.k8s:
-        state: present
-        definition: "{{ lookup('url', 'https://github.com/kubernetes-sigs/metrics-server/releases/latest/download/components.yaml', split_lines=False) }}"
-      tags: patch
+    # - name: Install metrics server
+    #   kubernetes.core.k8s:
+    #     state: present
+    #     definition: "{{ lookup('url', 'https://github.com/kubernetes-sigs/metrics-server/releases/latest/download/components.yaml', split_lines=False) }}"
+    #   tags: patch
