@@ -102,7 +102,7 @@
       with_items:
         - kubeadm
         - kubelet
-        - kubecetl
+        - kubectl
     - name: Load modules overlay and br_netfilter
       ansible.builtin.modprobe:
         name: overlay
