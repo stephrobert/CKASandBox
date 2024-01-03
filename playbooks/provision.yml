@@ -132,12 +132,21 @@
         mode: 0644
     - name: Check swap State
       ansible.builtin.stat:
-        path: /swapfile
+        path: /swap.img
       register: swap_file_check
-    - name: Umount swap | {{ inventory_hostname }}
-      ansible.posix.mount:
-        name: swap
-        fstype: swap
+    - name: Unmount swap | {{ inventory_hostname }}
+      ansible.builtin.shell:
+        cmd: swapoff -a
+      when: ansible_swaptotal_mb > 0
+    - name: Disable swap | {{ inventory_hostname }}
+      ansible.builtin.lineinfile:
+        path: /etc/fstab
+        regexp: '\sswap\s+sw\s+'
+        state: absent
+      when: swap_file_check.stat.exists
+    - name: Delete swap file
+      ansible.builtin.file:
+        path: /swap.img
         state: absent
       when: swap_file_check.stat.exists
     - name: Create containerd folder
@@ -155,10 +164,6 @@
         group: root
         mode: 0644
       notify: Restart containerd
-    - name: Swap Off | {{ inventory_hostname }}
-      ansible.builtin.shell:
-        cmd: swapoff -a
-      when: ansible_swaptotal_mb > 0
   handlers:
     - name: Restart containerd
       ansible.builtin.service:
