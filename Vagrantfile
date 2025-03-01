@@ -11,8 +11,8 @@ Vagrant.configure(2) do |config|
   cpu_worker = 1
   mem_worker = 1024
   config.vm.box = "generic/ubuntu2204" # Image for all installations
-  kubectl_version = "1.25.3-00"
-  kube_version = "1.25.3-00"
+  kubectl_version = "1.31"
+  kube_version = "1.31"
 
 # Compute nodes
   number_machines = number_cplane + number_worker

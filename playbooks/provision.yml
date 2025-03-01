@@ -26,7 +26,7 @@
       ansible.posix.authorized_key:
         user: vagrant
         state: present
-        key: "{{ lookup('file', '{{ home_user }}/.ssh/id_rsa.pub') }}"
+        key: "{{ lookup('file', '{{ home_user }}/.ssh/id_ed25519.pub') }}"
     - name: Add IP address of all hosts to all hosts | {{ inventory_hostname }}
       ansible.builtin.lineinfile:
         dest: /etc/hosts
@@ -37,16 +37,16 @@
       with_items: "{{ groups.all }}"
     - name: Copy SSH key
       ansible.builtin.copy:
-        src: ~/.ssh/id_rsa
-        dest: /home/vagrant/.ssh/id_rsa
-        mode: 0600
+        src: ~/.ssh/id_ed25519
+        dest: /home/vagrant/.ssh/id_ed25519
+        mode: "0600"
         owner: vagrant
         group: vagrant
     - name: Copy SSH config
       ansible.builtin.copy:
         src: files/ssh-config
         dest: /home/vagrant/.ssh/config
-        mode: 0600
+        mode: "0600"
         owner: vagrant
         group: vagrant
   handlers:
@@ -65,12 +65,15 @@
       net.bridge.bridge-nf-call-ip6tables: 1
       net.bridge.bridge-nf-call-iptables: 1
   tasks:
-    - name: Add Kubernetes GPG key | {{ inventory_hostname }}
-      ansible.builtin.apt_key:
-        url: https://packages.cloud.google.com/apt/doc/apt-key.gpg
-    - name: Add Kubernetes repository | {{ inventory_hostname }}
+    - name: Add Kubernetes apt-key
+      ansible.builtin.get_url:
+        url: https://pkgs.k8s.io/core:/stable:/v{{ kube_version }}/deb/Release.key
+        dest: /etc/apt/keyrings/kubernetes-apt-keyring.asc
+        mode: "0644"
+        force: true
+    - name: Add Kubernetes APT repository
       ansible.builtin.apt_repository:
-        repo: deb https://apt.kubernetes.io/ kubernetes-xenial main
+        repo: "deb [signed-by=/etc/apt/keyrings/kubernetes-apt-keyring.asc] https://pkgs.k8s.io/core:/stable:/v{{ kube_version }}/deb/ /"
         state: present
         update_cache: true
     - name: Add Docker GPG key | {{ inventory_hostname }}
@@ -88,9 +91,9 @@
           - software-properties-common
           - apt-transport-https
           - ca-certificates
-          - kubelet={{ kube_version }}
-          - kubeadm={{ kube_version }}
-          - kubectl={{ kubectl_version }}
+          - kubelet
+          - kubeadm
+          - kubectl
           - cri-tools
           - containerd.io
           - net-tools
@@ -104,7 +107,7 @@
         - kubelet
         - kubectl
     - name: Load modules overlay and br_netfilter
-      ansible.builtin.modprobe:
+      community.general.modprobe:
         name: overlay
         state: present
       with_items:
@@ -129,7 +132,7 @@
         dest: /etc/
         owner: root
         group: root
-        mode: 0644
+        mode: "0644"
     - name: Check swap State
       ansible.builtin.stat:
         path: /swap.img
@@ -154,7 +157,7 @@
         name: /etc/containerd/
         owner: root
         group: root
-        mode: 0644
+        mode: "0644"
         state: directory
     - name: Delete Container default config
       ansible.builtin.copy:
@@ -162,7 +165,7 @@
         dest: /etc/containerd/config.toml
         owner: root
         group: root
-        mode: 0644
+        mode: "0644"
       notify: Restart containerd
   handlers:
     - name: Restart containerd
@@ -176,13 +179,17 @@
   become: true
 
   tasks:
-    - name: Add Kubernetes GPG key | {{ inventory_hostname }}
-      ansible.builtin.apt_key:
-        url: https://packages.cloud.google.com/apt/doc/apt-key.gpg
-    - name: Add Kubernetes repository | {{ inventory_hostname }}
+    - name: Add Kubernetes apt-key
+      ansible.builtin.get_url:
+        url: https://pkgs.k8s.io/core:/stable:/v{{ kube_version }}/deb/Release.key
+        dest: /etc/apt/keyrings/kubernetes-apt-keyring.asc
+        mode: "0644"
+        force: true
+    - name: Add Kubernetes APT repository
       ansible.builtin.apt_repository:
-        repo: deb https://apt.kubernetes.io/ kubernetes-xenial main
+        repo: "deb [signed-by=/etc/apt/keyrings/kubernetes-apt-keyring.asc] https://pkgs.k8s.io/core:/stable:/v{{ kube_version }}/deb/ /"
         state: present
+        update_cache: true
     - name: Install packages | {{ inventory_hostname }}
       ansible.builtin.package:
         name:
@@ -196,7 +203,7 @@
       ansible.builtin.template:
         src: files/haproxy.cfg.j2
         dest: /etc/haproxy/haproxy.cfg
-        mode: 0644
+        mode: "0644"
     - name: Start haproxy | {{ inventory_hostname }}
       ansible.builtin.service:
         name: haproxy
@@ -208,4 +215,4 @@
         state: directory
         owner: vagrant
         group: vagrant
-        mode: 0700
+        mode: "0700"
